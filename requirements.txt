@@ -1,0 +1,4 @@
+requests==2.27.1
+BeautifulSoup4==4.10.0
+arcgis2geojson==3.0.1
+tk==8.6.11
