@@ -7,8 +7,10 @@ import os
 import json
 import time
 from arcgis2geojson import arcgis2geojson
+from tqdm import tqdm
 
 SLEEP_TIME=4
+
 r = requests.get('https://luz.tcd.gov.tw/WEB/')
 session_id =  r.headers['Set-Cookie'].split(';')[0].split('=')[-1]
 soup = BeautifulSoup(r.text, "html.parser")
@@ -101,6 +103,17 @@ class TK_Window():
             command=self.save_plans
         )
         self.download_plans_button.grid(column=1, row=7)
+
+        # download progress bar
+        self.labelProgressBar = tk.Label(self.window, text='下載進度')
+        self.labelProgressBar.grid(column=0, row=8)
+        self.progressBar = ttk.Progressbar(self.window, orient='horizontal', length=200, mode='determinate')
+        self.progressBar.grid(column=0, row=9)
+        self.labelProgress = tk.Label(self.window, text='0.00%')
+        self.labelProgress.grid(column=1, row=9)
+
+
+
     def main(self):
         self.window.mainloop()
     
@@ -144,22 +157,45 @@ class TK_Window():
         self.path_label["text"] = self.path
 
     def save_plan(self):
+        self.progressBar['value'] = 0
+        self.labelProgress['text'] = "0.00%"
+        self.window.update()
         geometry_url = f"https://luz.tcd.gov.tw:443/WEB/ws_data.ashx?CMD=SEARCHURBANRANGE&TOKEN={token}"
         geometry_cookies = {"ASP.NET_SessionId": session_id}
         geometry_headers = {"Sec-Ch-Ua": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"96\"", "Accept": "*/*", "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "Sec-Ch-Ua-Mobile": "?0", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36", "Sec-Ch-Ua-Platform": "\"Linux\"", "Origin": "https://luz.tcd.gov.tw", "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty", "Referer": "https://luz.tcd.gov.tw/WEB/default.aspx", "Accept-Encoding": "gzip, deflate", "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"}
         if self.urbanPlanCombobox.get() != 'ALL':
             geometry_data = {"VAL1": self.plan_id}
             res = session.post(geometry_url, headers=geometry_headers, cookies=geometry_cookies, data=geometry_data).json()
+            del res['spatialReference']
             json.dump(arcgis2geojson(res), open(os.path.join(self.path, f'{self.urbanPlanCombobox.get()}.json'), "w")) 
+            self.progressBar['value'] = self.progressBar["maximum"]
+            self.labelProgress['text'] = '100.00%'
         else:
-            for plan_name, plan_id in self.plan2id.items():
+            combine_json = {
+                "type" : "FeatureCollection",
+                "features" : []
+            }
+            interval = self.progressBar["maximum"] / len(self.plan2id.items())
+            for i, (plan_name, plan_id) in tqdm(enumerate(self.plan2id.items())):
                 geometry_data = {"VAL1": plan_id}
                 res = session.post(geometry_url, headers=geometry_headers, cookies=geometry_cookies, data=geometry_data).json()
-                print(res)
-                json.dump(arcgis2geojson(res), open(os.path.join(self.path, f'{plan_name}.json'), "w")) 
+                del res['spatialReference']
+                res = arcgis2geojson(res)
+                combine_json["features"] += res["features"]
+                self.progressBar['value'] = i * interval
+                self.labelProgress['text'] = f"{self.progressBar['value']:5.2f}%"
+                self.window.update()
                 time.sleep(SLEEP_TIME)
+            self.progressBar['value'] = self.progressBar["maximum"]
+            self.labelProgress['text'] = '100.00%'
+            self.window.update()
+            json.dump(combine_json, open(os.path.join(self.path, f'{self.countyCombobox.get()}_ALL.json'), "w")) 
+            
     
     def save_plans(self):
+        self.progressBar['value'] = 0
+        self.labelProgress['text'] = "0.00%"
+        self.window.update()
         geometry_url = f"https://luz.tcd.gov.tw:443/WEB/ws_data.ashx?CMD=SEARCHURBANLANDUSE&TOKEN={token}"
         geometry_cookies = {"ASP.NET_SessionId": session_id}
         geometry_headers = {"Sec-Ch-Ua": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"96\"", "Accept": "*/*", "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "Sec-Ch-Ua-Mobile": "?0", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36", "Sec-Ch-Ua-Platform": "\"Linux\"", "Origin": "https://luz.tcd.gov.tw", "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty", "Referer": "https://luz.tcd.gov.tw/WEB/default.aspx", "Accept-Encoding": "gzip, deflate", "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"}
@@ -167,14 +203,24 @@ class TK_Window():
             self.plans_id = self.plans2id[self.urbanPlansCombobox.get()]
             geometry_data = {"VAL1": self.plan_id, "VAL2" : self.plans_id}
             res = session.post(geometry_url, headers=geometry_headers, cookies=geometry_cookies, data=geometry_data).json()
+            del res['spatialReference']
             json.dump(arcgis2geojson(res), open(os.path.join(self.path, f'{self.urbanPlansCombobox.get()}.json'), "w")) 
+            self.progressBar['value'] = self.progressBar["maximum"]
+            self.labelProgress['text'] = '100.00%'
         else:
-            for plans_name, plans_id in self.plans2id.items():
+            interval = self.progressBar["maximum"] / len(self.plans2id.items())
+            for i, (plans_name, plans_id) in tqdm(enumerate(self.plans2id.items())):
                 geometry_data = {"VAL1": self.plan_id, "VAL2" : plans_id}
                 res = session.post(geometry_url, headers=geometry_headers, cookies=geometry_cookies, data=geometry_data).json()
+                del res['spatialReference']
                 json.dump(arcgis2geojson(res), open(os.path.join(self.path, f'{plans_name}.json'), "w")) 
+                self.progressBar['value'] = i * interval
+                self.labelProgress['text'] = f"{self.progressBar['value']:5.2f}%"
+                self.window.update()
                 time.sleep(SLEEP_TIME)
-
+        self.progressBar['value'] = self.progressBar["maximum"]
+        self.labelProgress['text'] = '100.00%'
+        self.window.update()
 tk_window = TK_Window()
 tk_window.main()
 
