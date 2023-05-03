@@ -9,13 +9,13 @@
 * Environment
 
   ```bash
-  $python3 -m pip install -r requirements.txt
+  $ python3 -m pip install -r requirements.txt
   ```
 
 * Run
 
   ```bash
-  $python3 crawl.py
+  $ python3 crawl.py
   ```
 
   
